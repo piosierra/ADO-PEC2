@@ -3,28 +3,69 @@ title: "ADO-PEC2"
 author: "Pío Sierra"
 date: "31/5/2020"
 output: pdf_document
+params:
+  counts_file: ./counts.csv
+  targets_file: ./targets.csv
+  samples: 10
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+if(!(require(plyr))) 
+  install.packages("plyr")
+if(!(require(ggplot2))) 
+  install.packages("ggplot2")
+if(!(require(RColorBrewer))) 
+  install.packages("RColorBrewer")
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+**a) Identify the groups and match groups to files.**  
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+# Leemos los archivos de datos
+targets <- read.csv(params$targets_file)
+counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
 
-```{r cars}
-summary(cars)
+# Comprobamos que no falta ningún dato
+sum(is.na(targets))
+sum(is.na(counts))
+
+# Observamos la distribución de la media y la desviación estándar de las variables.
+plot(apply(counts[-1],2,mean))
+plot(apply(counts[-1],2,sd))
+
+# En un archivo se usa "." como separador, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.
+colnames(counts) <-gsub("[.]","-", colnames(counts))
+
+# Comprobamos el número de observaciones que hay de cada grupo.
+table(targets$Group)
+
+# Tomamos las muestras de targets.
+set.seed(123999)
+targets_sample <- ddply(targets,.(Group),function(x) x[sample(nrow(x),params$samples),])
+table(targets_sample$Group)
+
+# Y ahora las muestras correspondientes en counts
+counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)]
+identical(colnames(counts), targets$Sample_Name)
 ```
 
-## Including Plots
+**b) Quality control of the raw data.**  
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+colorsq <- brewer.pal(12, "Dark2")
+colorss <- brewer.pal(12, "YlOrRd")
+colorsd <- brewer.pal(12, "Spectral")
+png("figures/boxplotraw.png", width = 680, height = 680)
+print(boxplot(counts_sample, cex.axis=0.5, las=2,  which="all", 
+         main="Distribution of raw intensity values"))
+dev.off()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+**c) Data Normalization.**   
+
+We use the RMA (Robust Multichip Analysis) to perform background correction, normalization and summarize the data.  
+```{r include=FALSE}
+eset_rma <- rma(rawData)
+```
