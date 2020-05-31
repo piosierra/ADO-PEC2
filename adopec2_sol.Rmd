@@ -54,13 +54,14 @@ identical(colnames(counts), targets$Sample_Name)
 **b) Quality control of the raw data.**  
 
 ```{r}
-colorsq <- brewer.pal(12, "Dark2")
-colorss <- brewer.pal(12, "YlOrRd")
-colorsd <- brewer.pal(12, "Spectral")
-png("figures/boxplotraw.png", width = 680, height = 680)
-print(boxplot(counts_sample, cex.axis=0.5, las=2,  which="all", 
-         main="Distribution of raw intensity values"))
-dev.off()
+# Vemos que la disribución tiene un sesgo muy pronunciado. 
+# Mostramos una de las muestras como ejemplo, pero ocurre lo mismo en todas.
+qplot(counts_sample[,1], geom="histogram") 
+# Log base 2 is typically used as it facilitates the conversion back to the original scale: 
+# a difference of 1 on the log base 2 scale corresponds to a fold change of 2 on the original count scale. 
+pseudoCount = log2(counts_sample + 1)
+qplot(pseudoCount[,1], geom="histogram") 
+
 ```
 
 **c) Data Normalization.**   
