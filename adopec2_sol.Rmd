@@ -57,7 +57,12 @@ table(targets_sample$Group)
 
 # Y ahora las muestras correspondientes en counts
 counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)]
-identical(colnames(counts), targets$Sample_Name)
+
+# Y finalmente las ordenamos de la misma forma según las indicaciones para usar DESeq2. 
+targets_sample <- targets_sample[order(targets_sample$Sample_Name),]
+counts_sample <- counts_sample[ , order(colnames(counts_sample))]
+
+identical(colnames(counts_sample), targets_sample$Sample_Name)
 ```
 
 # b) Quality control of the raw data. 
@@ -97,6 +102,8 @@ dds <- dds[ rowSums(counts(dds)) > 1, ]
 nrow(dds)
 ```
 
+## Variance stabilizing transformation and rlog
+
 ```{r include=FALSE}
 
 vsd <- vst(dds, blind = FALSE)
@@ -111,10 +118,10 @@ df <- bind_rows(
   as_tibble(assay(rld)[, 1:2]) %>% mutate(transformation = "rlog"))
   
 colnames(df)[1:2] <- c("x", "y")  
-
-ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
-  coord_fixed() + facet_grid( . ~ transformation)  
-
+png("figures/vst.png", width = 680, height = 680)
+print(ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
+  coord_fixed() + facet_grid( . ~ transformation))
+dev.off()
 ```
 
 We can see how genes with low counts (bottom left-hand corner) seem to be excessively variable on the ordinary logarithmic scale, while the VST and rlog compress differences for the low count genes for which the data provide little information about differential expression.  
@@ -128,8 +135,10 @@ sampleDistMatrix <- as.matrix( sampleDists )
 rownames(sampleDistMatrix) <- paste( vsd$dex, vsd$cell, sep = " - " )
 colnames(sampleDistMatrix) <- NULL
 colors <- colorRampPalette( rev(brewer.pal(9, "BuGn")) )(255)
-pheatmap(sampleDistMatrix,
+png("figures/distmatrix.png", width = 680, height = 680)
+print(pheatmap(sampleDistMatrix,
          clustering_distance_rows = sampleDists,
          clustering_distance_cols = sampleDists,
-         col = colors)
+         col = colors))
+dev.off()
 ```
