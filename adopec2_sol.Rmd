@@ -23,6 +23,12 @@ if(!(require(DESeq2)))
   install.packages("DESeq2")
 if(!(require(pheatmap))) 
   install.packages("pheatmap")
+if(!(require(tibble))) 
+  install.packages("tibble")
+if(!(require(AnnotationDbi))) 
+  BiocManager::install("AnnotationDbi")
+if(!(require(org.Hs.eg.db))) 
+BiocManager::install("org.Hs.eg.db")
 
 ```
 
@@ -48,6 +54,8 @@ colnames(counts) <-gsub("[.]","-", colnames(counts))
 # Comprobamos el número de observaciones que hay de cada grupo.
 table(targets$Group)
 
+targets$Group <- as.factor(targets$Group)
+  
 # Tomamos las muestras de targets.
 set.seed(123999)
 # Utilizamos la función ddply para obtener el mismo número de muestras de cada grupo del data frame,
@@ -64,6 +72,8 @@ counts_sample <- counts_sample[ , order(colnames(counts_sample))]
 
 identical(colnames(counts_sample), targets_sample$Sample_Name)
 ```
+We choose to ignore the `molecular_data_type` information. If we would like to use only RNA Seq data we should filter that field first.
+
 
 # b) Quality control of the raw data. 
 
@@ -142,3 +152,69 @@ print(pheatmap(sampleDistMatrix,
          col = colors))
 dev.off()
 ```
+
+## PCA plot
+
+```{r include=FALSE}
+plotPCA(vsd, intgroup = c("Group"))
+```
+
+# Differential Expression Analysis
+
+```{r include=FALSE}
+dds <- DESeq(dds, parallel =TRUE)
+resultsNames(dds)
+# Group_NIT_vs_ELI
+res_NITvELI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
+# Group_SFI_vs_ELI
+res_SFIvELI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
+
+# Ahora cambiamos el orden de los factores para obtener la comparación que nos falta.
+
+targets_sample$Group <- relevel(targets_sample$Group, "NIT")
+dds <- DESeqDataSetFromMatrix(countData = counts_sample,
+                              colData = targets_sample,
+                              design = ~ Group)
+dds <- DESeq(dds, parallel =TRUE)
+resultsNames(dds)
+# Group_SFI_vs_NIT
+res_SFIvNIT <- results(dds, contrast=c(0,0,1), alpha = 0.05)
+
+# Group_ELI_vs_NIT
+res_ELIvNIT <- results(dds, contrast=c(0,1,0), alpha = 0.05)
+```
+## Top genes
+
+```{r include=FALSE}
+
+topGenes_NITvELI <- as.data.frame(res_NITvELI) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(100)
+head(topGenes_NITvELI)
+topGenes_SFIvELI <- as.data.frame(res_SFIvELI) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(100)
+head(topGenes_SFIvELI)
+topGenes_SFIvNIT <- as.data.frame(res_SFIvNIT) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(100)
+head(topGenes_SFIvNIT)
+
+```
+
+# Annotation
+
+```{r include=FALSE}
+columns(org.Hs.eg.db)
+
+res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
+                      keys=row.names(res_ELIvNIT),
+                      column="SYMBOL",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+```
+
+
