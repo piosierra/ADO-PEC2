@@ -32,6 +32,44 @@ BiocManager::install("org.Hs.eg.db")
 
 ```
 
+***
+@github: https://github.com/piosierra/ADO-PEC2
+
+***
+
+# Abstract
+
+
+# Objetivos
+
+Queremos hacer un análisis de expresión genética diferencial a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:
+  - *Not infiltrated tissues* (NIT)
+  - *Small focal infiltrates* (SFI)
+  - *Extensive lymphoid infiltrates* (ELI)
+  
+Para ello realizaremos los contrastes:
+  - SFI-NIT
+  - ELI-NIT
+  - ELI_SFI
+  
+# Materiales y métodos
+
+## Naturaleza de los datos
+
+## Métodos y herramientas
+ 
+## Workflow
+
+# Resultados
+
+# Discusión
+
+# Conclusión
+
+# Apéndice 1
+
+
+
 
 # a) Identify the groups and match groups to files.
 
