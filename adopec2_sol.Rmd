@@ -1,15 +1,21 @@
 ---
-title: "ADO-PEC2"
-author: "Pío Sierra"
-date: "31/5/2020"
-output: pdf_document
+title: "análisis de expresión genética diferencial en tiroides"
+author: "Pío Alberto Sierra Rodríguez"
+date: "14/6/2020"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+  html_document:
+    df_print: paged
 params:
   counts_file: ./counts.csv
   targets_file: ./targets.csv
   samples: 10
+bibliography: RNA-Seq.bib
 ---
 
-```{r setup, include=FALSE}
+```{r setup,}
 knitr::opts_chunk$set(echo = TRUE)
 if(!(require(plyr))) 
   install.packages("plyr")
@@ -33,7 +39,7 @@ BiocManager::install("org.Hs.eg.db")
 ```
 
 ***
-@github: https://github.com/piosierra/ADO-PEC2
+**Repositorio de github:** https://github.com/piosierra/ADO-PEC2
 
 ***
 
@@ -43,35 +49,37 @@ BiocManager::install("org.Hs.eg.db")
 # Objetivos
 
 Queremos hacer un análisis de expresión genética diferencial a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:
-  - *Not infiltrated tissues* (NIT)
-  - *Small focal infiltrates* (SFI)
-  - *Extensive lymphoid infiltrates* (ELI)
+* *Not infiltrated tissues* (NIT)
+* *Small focal infiltrates* (SFI)
+* *Extensive lymphoid infiltrates* (ELI)
   
 Para ello realizaremos los contrastes:
-  - SFI-NIT
-  - ELI-NIT
-  - ELI_SFI
+* SFI-NIT
+* ELI-NIT
+* ELI-SFI
   
 # Materiales y métodos
 
 ## Naturaleza de los datos
 
+Los datos han sido obtenidos del Genotype-Tissue Expression project **[@noauthor_gtex_nodate]**. Se trata de 292 muestras pertenecientes tiroides en distintos estados de infiltración lifocitaria. Se trata de una sintomatología no muy habitual. Y de hecho el número de muestras de tipo ELI, las de mayor afectación, es reducido. **[@jimenez_varo_infiltracion_2013]**, **[@onoda_reactive_2014]**.  
+Las muestras provienen de dos fuentes de datos. Por un lado las obtenidas por RNA-Seq (NGS), y por otro muestras provenientes de un trabajo separado para expresión de alelos (Allele-Specific Expression). 
+
 ## Métodos y herramientas
+
+Hemos utilizado el lenguaje R [@onoda_reactive_2014] y las herramientas de Bioconductor, en particular la librería DebSeq2 [@love_deseq2_2020].  
+
  
 ## Workflow
 
-# Resultados
-
-# Discusión
-
-# Conclusión
-
-# Apéndice 1
+### 1 Lectura de datos
 
 
 
+### 2 Identificación de grupos y preparación de los datos
 
-# a) Identify the groups and match groups to files.
+El informe está realizado a partir de dos archivos ya preparados. El archivo `r params$counts_file` contiene los conteos de las muestras del experimento para cada ensamble. El archivo `r params$targets` contiene los datos relacionados con cada una de las muestras.  
+Los archivos utilizados en el estudio están correctamente formados y no faltan datos.
 
 ```{r}
 # Leemos los archivos de datos
@@ -85,14 +93,54 @@ sum(is.na(counts))
 # Observamos la distribución de la media y la desviación estándar de las variables.
 plot(apply(counts[-1],2,mean))
 plot(apply(counts[-1],2,sd))
+```
 
-# En un archivo se usa "." como separador, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.
+En un archivo se usa "." como separador en el nombre de las muestras, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.
+
+```{r}
 colnames(counts) <-gsub("[.]","-", colnames(counts))
+```
 
-# Comprobamos el número de observaciones que hay de cada grupo.
+El número de observaciones que hay de cada grupo es:
+```{r}
 table(targets$Group)
+```
+La variable que codifica el grupo ha de ser un factor, y es muy importante tener en cuenta que el primer elemento del factor será tomado como elemento de control, y será con el que se harán las comparaciones en el caso de fórmula de una sola variable.  
+Para realizar los contrastes:  
+* SFI-NIT  
+* ELI-NIT  
+Debemos de tener a NIT como primer factor. Mientras que para el último contraste:  
+* ELI-SFI  
+EL primer factor debe de ser SFI.  
+Esta es una parte bastante delicada. Es importante para la correcta realización de las pruebas que los factores estén correctamente preparados. Esto puede comprobarse después comprobando los nombres de los contrastes preparados en el objeto *DESeqDataSet* con la instrucción `resultsNames`
 
+```{r}
 targets$Group <- as.factor(targets$Group)
+targets$Group <- relevel(targets$Group, "NIT")
+```
+
+
+Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada uno de los grupos.
+
+
+
+# Resultados
+
+# Discusión
+
+# Conclusión
+
+# Apéndice 1
+
+
+
+
+
+
+
+
+
+```{r}
   
 # Tomamos las muestras de targets.
 set.seed(123999)
@@ -116,7 +164,7 @@ We choose to ignore the `molecular_data_type` information. If we would like to u
 # b) Quality control of the raw data. 
 
 ```{r}
-# Vemos que la disribución tiene un sesgo muy pronunciado. 
+# Vemos que la distribución tiene un sesgo muy pronunciado. 
 # Mostramos una de las muestras como ejemplo, pero ocurre lo mismo en todas.
 qplot(counts_sample[,1], geom="histogram") 
 # Log base 2 is typically used as it facilitates the conversion back to the original scale: 
@@ -130,7 +178,7 @@ qplot(pseudoCount[,1], geom="histogram")
 
 We create now the DESeqDataSet object.
 
-```{r include=FALSE}
+```{r}
 dds <- DESeqDataSetFromMatrix(countData = counts_sample,
                               colData = targets_sample,
                               design = ~ Group)
@@ -144,7 +192,7 @@ First, for visualization purposes, we will transform the data to make it easier 
 ## Pre filtering the data set for empty rows.  
 We start by removing all rows which do have one or none count at all.  
 
-```{r include=FALSE}
+```{r}
 nrow(dds)
 dds <- dds[ rowSums(counts(dds)) > 1, ]
 nrow(dds)
@@ -152,7 +200,7 @@ nrow(dds)
 
 ## Variance stabilizing transformation and rlog
 
-```{r include=FALSE}
+```{r}
 
 vsd <- vst(dds, blind = FALSE)
 rld <- rlog(dds, blind = FALSE)
@@ -176,7 +224,7 @@ We can see how genes with low counts (bottom left-hand corner) seem to be excess
 
 ## Samples distances
 
-```{r include=FALSE}
+```{r}
 sampleDists <- dist(t(assay(vsd)))
 
 sampleDistMatrix <- as.matrix( sampleDists )
@@ -193,66 +241,67 @@ dev.off()
 
 ## PCA plot
 
-```{r include=FALSE}
+```{r}
 plotPCA(vsd, intgroup = c("Group"))
 ```
 
 # Differential Expression Analysis
 
-```{r include=FALSE}
+```{r}
 dds <- DESeq(dds, parallel =TRUE)
 resultsNames(dds)
-# Group_NIT_vs_ELI
-res_NITvELI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
-# Group_SFI_vs_ELI
-res_SFIvELI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
+# Group_ELI_vs_NIT
+res_ELIvNIT <- results(dds, contrast=c(0,1,0), alpha = 0.05)
+# Group_SFI_vs_NIT
+res_SFIvNIT <- results(dds, contrast=c(0,0,1), alpha = 0.05)
 
 # Ahora cambiamos el orden de los factores para obtener la comparación que nos falta.
 
-targets_sample$Group <- relevel(targets_sample$Group, "NIT")
+targets_sample$Group <- relevel(targets_sample$Group, "SFI")
 dds <- DESeqDataSetFromMatrix(countData = counts_sample,
                               colData = targets_sample,
                               design = ~ Group)
 dds <- DESeq(dds, parallel =TRUE)
 resultsNames(dds)
-# Group_SFI_vs_NIT
-res_SFIvNIT <- results(dds, contrast=c(0,0,1), alpha = 0.05)
+# Group_NIT_vs_SFI
+res_NITvSFI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
 
-# Group_ELI_vs_NIT
-res_ELIvNIT <- results(dds, contrast=c(0,1,0), alpha = 0.05)
+# Group_ELI_vs_SFI
+res_ELIvSFI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
 ```
 ## Top genes
 
-```{r include=FALSE}
+```{r}
 
-topGenes_NITvELI <- as.data.frame(res_NITvELI) %>%
-    rownames_to_column("GeneID") %>% 
-    arrange(padj) %>% 
-    head(100)
-head(topGenes_NITvELI)
-topGenes_SFIvELI <- as.data.frame(res_SFIvELI) %>%
-    rownames_to_column("GeneID") %>% 
-    arrange(padj) %>% 
-    head(100)
-head(topGenes_SFIvELI)
 topGenes_SFIvNIT <- as.data.frame(res_SFIvNIT) %>%
     rownames_to_column("GeneID") %>% 
     arrange(padj) %>% 
     head(100)
 head(topGenes_SFIvNIT)
+topGenes_ELIvNIT <- as.data.frame(res_ELIvNIT) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(100)
+head(topGenes_ELIvNIT)
+topGenes_ELIvSFI <- as.data.frame(res_ELIvSFI) %>%
+    rownames_to_column("GeneID") %>% 
+    arrange(padj) %>% 
+    head(100)
+head(topGenes_ELIvSFI)
 
 ```
 
 # Annotation
 
-```{r include=FALSE}
+```{r}
 columns(org.Hs.eg.db)
 
-res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
-                      keys=row.names(res_ELIvNIT),
-                      column="SYMBOL",
-                      keytype="ENSEMBL",
-                      multiVals="first")
+ # res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
+   #                   keys=row.names(res_ELIvNIT),
+    #                  column="SYMBOL",
+     #                 keytype="ENSEMBL",
+      #                multiVals="first")
 ```
 
+# Bibliografía
 
