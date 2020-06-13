@@ -1,5 +1,5 @@
 ---
-title: "análisis de expresión genética diferencial en tiroides"
+title: "Análisis de expresión genética diferencial en muestras de tiroides"
 author: "Pío Alberto Sierra Rodríguez"
 date: "14/6/2020"
 output: 
@@ -43,9 +43,9 @@ if(!(require(AnnotationDbi)))
 if(!(require(ashr))) 
   BiocManager::install("ashr")
 if(!(require(org.Hs.eg.db))) 
-BiocManager::install("org.Hs.eg.db")
+  BiocManager::install("org.Hs.eg.db")
 if(!(require(clusterProfiler))) 
-BiocManager::install("clusterProfiler")
+  BiocManager::install("clusterProfiler")
 
 ```
 
@@ -99,7 +99,7 @@ counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
 sum(is.na(targets))
 sum(is.na(counts))
 ```
-```{r echo=FALSE}
+```{r iniplot, echo=FALSE, fig.width=7,fig.height=6,fig.cap="\\label{fig:iniplot}Análisis exploratorio de las muestras."}
 # Observamos la distribución de la media y la desviación estándar de las variables.
 par(mfrow=c(1,2))
 plot(apply(counts[-1],2,mean), main = "Medias de las muestras", xlab="", ylab="")
@@ -122,7 +122,7 @@ kable_styling(knitr::kable(table(targets$Group), booktabs = TRUE,
 La variable que codifica el grupo ha de ser un factor, y es muy importante tener en cuenta que el primer elemento del factor será tomado como elemento de control, y será con el que se harán las comparaciones en el caso de fórmula de una sola variable.  
 Para realizar los contrastes:  
 
-* SFI-NIT  
+* SFI-NIT
 * ELI-NIT  
 
 Debemos de tener a NIT como primer factor. Mientras que para el último contraste:  
@@ -131,7 +131,7 @@ Debemos de tener a NIT como primer factor. Mientras que para el último contrast
 
 EL primer factor debe de ser SFI.  
 
-Esta es una parte bastante delicada. Es importante para la correcta realización de las pruebas que los factores estén correctamente preparados. Esto puede comprobarse después comprobando los nombres de los contrastes preparados en el objeto *DESeqDataSet* con la instrucción `resultsNames`
+Esta es una parte bastante delicada. Es importante para la correcta realización de las pruebas que los factores estén correctamente preparados. Esto puede comprobarse después comprobando los nombres de los contrastes preparados en el objeto *DESeqDataSet* con la instrucción `resultsNames`. En realidad para este estudio no es tan relevante, ya que queremos comparar los tres grupos y por tanto procederemos a seleccionar los contrastes manualmente. 
 
 ```{r include = FALSE}
 targets$Group <- as.factor(targets$Group)
@@ -158,16 +158,16 @@ counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)
 # Y finalmente las ordenamos de la misma forma según las indicaciones para usar DESeq2. 
 targets_sample <- targets_sample[order(targets_sample$Group),]
 counts_sample <- counts_sample[ , targets_sample$Sample_Name]
+identical(colnames(counts_sample), targets_sample$Sample_Name)
 ```
 Un último paso muy importante es ordenar los dos dataframes, `counts` y `targets` para que el orden de las columnas del primero coincida con el orden de las filas del otro. *DebSeq2* no hace ninguna comprobación a la hora de cruzar los datos ni utiliza ningún campo como clave, se limita a cruzar por orden fila con columna, por lo que estas han de estar correctamente ordenadas.  
 En la tabla 2 se puede ver el resultado parcial para las cinco primeras columnas y filas de la ordenación efectuada.  
 
-```{r}
+```{r echo = FALSE}
 kable_styling(knitr::kable(data.frame("Columnas en counts" = head(colnames(counts_sample)),
                                       "Filas en targets" = head(targets_sample$Sample_Name)),
                            booktabs = TRUE,
                            caption = 'Ejemplo de las muestras correctamente ordenadas'),font_size = 10)
-identical(colnames(counts_sample), targets_sample$Sample_Name)
 ```
 
 ### Control de calidad de los datos en bruto
@@ -223,8 +223,8 @@ nrow(dds)
 
 ### Transformación para estabilizar la varianza
 
-El siguiente paso es transformar los datos para estabilizar la varianza 
-```{r}
+El siguiente paso es transformar los datos para estabilizar la varianza y poder así estudiarlos visualmente más fácilmente.
+```{r include = FALSE}
 
 vsd <- vst(dds, blind = FALSE)
 rld <- rlog(dds, blind = FALSE)
@@ -244,7 +244,7 @@ print(ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
 dev.off()
 ```
 
-We can see how genes with low counts (bottom left-hand corner) seem to be excessively variable on the ordinary logarithmic scale, while the VST and rlog compress differences for the low count genes for which the data provide little information about differential expression.  
+En el apéndice se puede ver la comparación de la dispersión de la varianza entre los datos en bruto y los datos normalizados con `vst` y `rlog`. El objetivo es comprobar que hay datos que tienen mucha varianza a pesar de tener un conteo pequeño, y que esas tranformaciones reducen la varianza en ese rango de datos.   
 
 Como se trata de una comparación entre solo tres grupos, uno de control y otros dos. Un estudio de Principal Component Analysis nos permite identificar rápidamente si hay diferencias representativas en nuestros grupos. 
 
@@ -253,7 +253,7 @@ png("figures/pca.png", width = 680, height = 680)
 plotPCA(vsd, intgroup = c("Group"))
 dev.off()
 ```
-```{r}
+```{r include = FALSE}
 sampleDists <- dist(t(assay(vsd)))
 
 sampleDistMatrix <- as.matrix( sampleDists )
@@ -274,7 +274,7 @@ Para realizar el análisis hemos utilizado la función `DESeq` y después obteni
 Obtenemos los resultados en bruto y también aplicando compresión a los resultados de log2Fold. Como vamos a enriquecer luego los datos y para compararlos mejor es conveniente proceder a la compresión de los resultados de log2Fold. Esto en anteriores versiones se hacía por defecto y ahora se consigue con la función `lfcShrink`. También ayuda para la visualización de los mismos.  
 
 
-```{r}
+```{r include = FALSE}
 dds <- DESeq(dds, parallel =TRUE)
 resultsNames(dds)
 # Group_ELI_vs_NIT
@@ -306,7 +306,7 @@ title("ELIvSFI sin compresión")
 
 ```
 
-En la Figura 3 podemos ver el `log2` de fold change para cada uno de los resultados. Los puntos azules son aquellos que tienen un valor representativo de p-adjust, y los triángulos en los bordes muestran dónde los puntos salen de rango.  
+En la Figura 2 podemos ver el `log2` de fold change para cada uno de los resultados. Los puntos azules son aquellos que tienen un valor representativo de p-adjust, y los triángulos en los bordes muestran dónde los puntos salen de rango.  
 Observamos que hay una sobre expresión representativa respecto a NIT tanto en SFI como en ELI.  
 
 ### Anotación
@@ -316,7 +316,8 @@ Enriquecemos los datos con la información sobre el gen al que pertenece cada `e
 Después guardamos los archivos con los resultados enriquecidos y ordenados por p-adjust.
 
 
-```{r}
+```{r include = FALSE}
+# Enriquecemos los datos.
 columns(org.Hs.eg.db)
 
 res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
@@ -350,21 +351,41 @@ res_ELIvSFI$entrez <- mapIds(org.Hs.eg.db,
                       keytype="ENSEMBL",
                       multiVals="first")
 
+# Los ordenamos por p-ajustado
 res_ELIvNIT <- res_ELIvNIT[order(res_ELIvNIT$pvalue),]
 res_SFIvNIT <- res_SFIvNIT[order(res_SFIvNIT$pvalue),]
 res_ELIvSFI <- res_ELIvSFI[order(res_ELIvSFI$pvalue),]
 
-write.csv(HMdata, file = file.path("./results/data4Heatmap.csv"))
+# Guardamos los datos
+write.csv(res_ELIvNIT, file = file.path("./results/res_ELIvNIT.csv"))
+write.csv(res_SFIvNIT, file = file.path("./results/res_SFIvNIT.csv"))
+write.csv(res_ELIvSFI, file = file.path("./results/res_ELIvSFI.csv"))
 
-kable_styling(knitr::kable(head(res_ELIvNIT[,c(5,6,7)],10), booktabs = TRUE,
+```
+Podemos ver el resultado de los genes más sobre expresados en cada una de las comparaciones. Conviene recordar que tal y como comprobamos visualmente en todos los casos en estos tres contrastes estamos hablando de que los genes más diferencialmente expresados lo hacen por sobre expresión, y no por un descenso de la misma.
+
+```{r echo = FALSE}
+kable_styling(knitr::kable(head(res_ELIvNIT[,c(5,6,7)],5), booktabs = TRUE,
                             caption = 'ELIvNIT'),font_size = 10, 
               bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
-kable_styling(knitr::kable(head(res_SFIvNIT[,c(5,6,7)],10), booktabs = TRUE,
+kable_styling(knitr::kable(head(res_SFIvNIT[,c(5,6,7)],5), booktabs = TRUE,
                             caption = 'SFIvNIT'),font_size = 10, 
               bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
-kable_styling(knitr::kable(head(res_ELIvSFI[,c(5,6,7)],10), booktabs = TRUE,
+kable_styling(knitr::kable(head(res_ELIvSFI[,c(5,6,7)],5), booktabs = TRUE,
                             caption = 'ELIvSFI'),font_size = 10, 
               bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
+
+```
+Por último utilizamos la función `enrichKEGG` del paquete *clusterProfiler* para obtener pathways representativos de los genes más sobre expresados. En los apéndices se puede ver los dos pathways más representativos para el contraste ELIvNIT.  
+
+```{r include = FALSE}
+
+kk <- enrichKEGG(gene         = head(res_ELIvNIT$entrez,5),
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.05)
+head(kk$Description)
+
+# browseKEGG(kk, 'hsa05164')
 
 ```
 
@@ -395,7 +416,7 @@ kable_styling(knitr::kable(head(res_ELIvSFI[,c(5,6,7)],10), booktabs = TRUE,
 
 ## Top genes
 
-```{r}
+```{r include = FALSE}
 
 topGenes_SFIvNIT <- as.data.frame(res_SFIvNIT) %>%
     rownames_to_column("GeneID") %>% 
@@ -415,24 +436,32 @@ head(topGenes_ELIvSFI)
 
 ```
 
-```{r}
 
-kk <- enrichKEGG(gene         = topGenes_SFIvNIT$entrez,
-                 organism     = 'hsa',
-                 pvalueCutoff = 0.05)
-
-head(kk)
-
-# browseKEGG(kk, 'hsa05164')
-
-```
 
 
 # Apéndice A - Figuras
 
-\begin{center}Fig.1: Boxplot for raw data\end{center}
+\begin{center}Fig.1: Boxplot de los datos normalizados\end{center}
  
 ![Boxplot Norm](figures/boxplotnorm.png)
+\begin{center}Fig.2: Gráficos de dispersión de transformaciones de la varianza\end{center}
+ 
+![Boxplot Norm](figures/vst.png)
+
+\begin{center}Fig.2: Principal Component Analysis de los datos normalizados\end{center}
+ 
+![Boxplot Norm](figures/pca.png)
+
+
+
+\begin{center}Fig.2: Pathway Primary Immunodeficiency \end{center}
+ 
+![Boxplot Norm](figures/primary_im.png)
+\begin{center}Fig.3: Pathway Hematopoietic cell lineage \end{center}
+ 
+![Boxplot Norm](figures/Hematopoietic.png)
+
+
 
 
 
@@ -445,17 +474,6 @@ Incluimos la información sobre la sesión de R con la que se realizó el trabaj
 sessionInfo()
 ```
 
-targets_sample$Group <- relevel(targets_sample$Group, "SFI")
-dds <- DESeqDataSetFromMatrix(countData = counts_sample,
-                              colData = targets_sample,
-                              design = ~ Group)
-dds <- DESeq(dds, parallel =TRUE)
-resultsNames(dds)
-# Group_NIT_vs_SFI
-res_NITvSFI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
-
-# Group_ELI_vs_SFI
-res_ELIvSFI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
 
 # Referencias
 
