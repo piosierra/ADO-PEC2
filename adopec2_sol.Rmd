@@ -78,12 +78,12 @@ Hemos utilizado el lenguaje R [@noauthor_r_nodate] y las herramientas de Biocond
  
 ## Workflow
 
-### 1 Lectura de datos
+### Lectura de datos
 
 El informe está realizado a partir de dos archivos ya preparados. El archivo `r params$counts_file` contiene los conteos de las muestras del experimento para cada ensamble. El archivo `r params$targets` contiene los datos relacionados con cada una de las muestras.  
 Los archivos utilizados en el estudio están correctamente formados y no faltan datos.
 
-```{r echo=FALSE}
+```{r include = FALSE}
 # Leemos los archivos de datos
 targets <- read.csv(params$targets_file)
 counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
@@ -91,7 +91,8 @@ counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
 # Comprobamos que no falta ningún dato
 sum(is.na(targets))
 sum(is.na(counts))
-
+```
+```{r echo=FALSE}
 # Observamos la distribución de la media y la desviación estándar de las variables.
 par(mfrow=c(1,2))
 plot(apply(counts[-1],2,mean), main = "Medias de las muestras", xlab="", ylab="")
@@ -104,11 +105,10 @@ En un archivo se usa "." como separador en el nombre de las muestras, y en el ot
 colnames(counts) <-gsub("[.]","-", colnames(counts))
 ```
 
-### 2 Identificación de grupos y preparación de los datos
+### Identificación de grupos y preparación de los datos
 
-El número de observaciones que hay de cada grupo es:
+El número de observaciones que hay de cada grupo puede verse en la tabla 1.
 ```{r echo = FALSE}
-table(targets$Group)
 kable_styling(knitr::kable(table(targets$Group), booktabs = TRUE,
                             caption = 'Muestras por grupo'),font_size = 10)
 ```
@@ -132,7 +132,8 @@ targets$Group <- relevel(targets$Group, "NIT")
 ```
 
 
-Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada uno de los grupos. Para hacerlo sin tener que dividir el data frame nos valemos de la función `ddply`, que permite aplicar una función a distintos conjuntos de un data frame, y crea un data frame de salida con las respuestas. Así la usamos para generar un data frame con el número de muestras deseadas para cada grupo.  
+Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada uno de los grupos. Para hacerlo sin tener que dividir el dataframe nos valemos de la función `ddply`, que permite aplicar una función a distintos conjuntos de un dataframe, y crea un dataframe de salida con las respuestas. Así la usamos para generar un dataframe con el número de muestras deseadas para cada grupo.  
+
 Es importante haber comprobado antes que el número de muestras de cada grupo excede al de muestras a coger para el experimento, ya que si no los resultados no serán correctos.
 
 ```{r include = FALSE}
@@ -151,6 +152,8 @@ counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)
 targets_sample <- targets_sample[order(targets_sample$Sample_Name),]
 counts_sample <- counts_sample[ , order(colnames(counts_sample))]
 ```
+Un último paso muy importante es ordernar los dos dataframes, `counts` y `targets` para que el orden de las columnas del primero coincida con el orden de las filas del otro. *DebSeq2* no hace ninguna comprobación a la hora de cruzar los datos ni utiliza ningún campo como clave, se limita a cruzar por orden fila con columna, por lo que estas han de estar correctamente ordenadas.  
+En la tabla 2 se puede ver el resultado parcial para las cinco primeras columnas y filas de la ordenación efectuada.  
 
 ```{r}
 kable_styling(knitr::kable(data.frame("Columnas en counts" = head(colnames(counts_sample)),
@@ -160,42 +163,20 @@ kable_styling(knitr::kable(data.frame("Columnas en counts" = head(colnames(count
 identical(colnames(counts_sample), targets_sample$Sample_Name)
 ```
 
+### Control de calidad de los datos en bruto
 
-# Resultados
-
-# Discusión
-
-# Conclusión
-
-# Apéndice 1
+Es necesario realizar un control de la calidad de los datos antes de proceder con el experimento. 
 
 
+### Creación del objeto DESeqDataSet 
 
+DebSeq2 trabaja con un objeto *DESeqDataSet* que está construido sobre la clase *SummarizedExperiment*. Una de las diferencias fundamentales es que el objeto incluye una fórmula de diseño asociada, que será la que informa a muchas de las funciones que manipulen el objeto sobre cómo utilizar las muestras.  
 
+Una fórmula puede ser de la forma `~ variable` donde `variable` es una columna de factores que especifica dos o más grupos a los que pertenecen las muestras. Se pueden añadir otras columnas separándolas por `+` según el diseño de fórmulas habitual de R.  
 
+Por defecto DebSeq2 va a preparar los contrastes de cada grupo con el primero de los factores, que será tenido como elemento de control. Por eso es importante que "coloquemos" los factores de tal forma que el primero sea ese. Esto se puede conseguir con la función `relevel`.  
 
-
-
-
-
-
-
-# b) Quality control of the raw data. 
-
-```{r}
-# Vemos que la distribución tiene un sesgo muy pronunciado. 
-# Mostramos una de las muestras como ejemplo, pero ocurre lo mismo en todas.
-qplot(counts_sample[,1], geom="histogram") 
-# Log base 2 is typically used as it facilitates the conversion back to the original scale: 
-# a difference of 1 on the log base 2 scale corresponds to a fold change of 2 on the original count scale. 
-pseudoCount = log2(counts_sample + 1)
-qplot(pseudoCount[,1], geom="histogram") 
-
-```
-
-# c) Creating the DESeqDataSet object
-
-We create now the DESeqDataSet object.
+En nuestro caso queremos hacer dos contrastes con el grupo de control NIT, pero también uno adicional entre ELI y SFI. Por tanto después de obtener los resultados para los primeros dos contrastes cambiamos el orden de los factores y obtenemos además el contraste buscado. Si lo hemos hecho correctamente, el contraste realizado dos veces pero en dirección distinta (SFI-NIT, NIT-SFI) tendrá los mismos coeficientes pero con los signos cambiados.  
 
 ```{r}
 dds <- DESeqDataSetFromMatrix(countData = counts_sample,
@@ -204,7 +185,7 @@ dds <- DESeqDataSetFromMatrix(countData = counts_sample,
 ```
 
 
-# d) Exploratory analysis and visualization 
+### Análisis exploratorio y visualización 
 
 First, for visualization purposes, we will transform the data to make it easier to explore the relationships on it. But for the statistical analysis we will go back to use the full data.
 
@@ -240,6 +221,30 @@ dev.off()
 ```
 
 We can see how genes with low counts (bottom left-hand corner) seem to be excessively variable on the ordinary logarithmic scale, while the VST and rlog compress differences for the low count genes for which the data provide little information about differential expression.  
+
+
+
+# Resultados
+
+# Discusión
+
+# Conclusión
+
+# Apéndice 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Samples distances
 
@@ -322,5 +327,30 @@ columns(org.Hs.eg.db)
       #                multiVals="first")
 ```
 
-# Bibliografía
+# Extra
+
+b) Quality control of the raw data. 
+
+```{r}
+# Vemos que la distribución tiene un sesgo muy pronunciado. 
+# Mostramos una de las muestras como ejemplo, pero ocurre lo mismo en todas.
+qplot(counts_sample[,1], geom="histogram") 
+# Log base 2 is typically used as it facilitates the conversion back to the original scale: 
+# a difference of 1 on the log base 2 scale corresponds to a fold change of 2 on the original count scale. 
+pseudoCount = log2(counts_sample + 1)
+qplot(pseudoCount[,1], geom="histogram") 
+```
+
+# Información de la sesión de R
+
+Incluimos la información sobre la sesión de R con la que se realizó el trabajo, para poder identificar después problemas ocasionados por cambios de versiones.  
+
+```{r}
+sessionInfo()
+```
+
+# Referencias
+
+
+
 
