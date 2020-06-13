@@ -19,6 +19,8 @@ bibliography: RNA-Seq.bib
 knitr::opts_chunk$set(echo = TRUE)
 if(!(require(plyr))) 
   install.packages("plyr")
+if(!(require(reshape))) 
+  install.packages("reshape")
 if(!(require(knitr))) 
   install.packages("knitr")
 if(!(require(kableExtra))) 
@@ -37,6 +39,8 @@ if(!(require(tibble)))
   install.packages("tibble")
 if(!(require(AnnotationDbi))) 
   BiocManager::install("AnnotationDbi")
+if(!(require(ashr))) 
+  BiocManager::install("ashr")
 if(!(require(org.Hs.eg.db))) 
 BiocManager::install("org.Hs.eg.db")
 
@@ -149,10 +153,10 @@ table(targets_sample$Group)
 counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)]
 
 # Y finalmente las ordenamos de la misma forma según las indicaciones para usar DESeq2. 
-targets_sample <- targets_sample[order(targets_sample$Sample_Name),]
-counts_sample <- counts_sample[ , order(colnames(counts_sample))]
+targets_sample <- targets_sample[order(targets_sample$Group),]
+counts_sample <- counts_sample[ , targets_sample$Sample_Name]
 ```
-Un último paso muy importante es ordernar los dos dataframes, `counts` y `targets` para que el orden de las columnas del primero coincida con el orden de las filas del otro. *DebSeq2* no hace ninguna comprobación a la hora de cruzar los datos ni utiliza ningún campo como clave, se limita a cruzar por orden fila con columna, por lo que estas han de estar correctamente ordenadas.  
+Un último paso muy importante es ordenar los dos dataframes, `counts` y `targets` para que el orden de las columnas del primero coincida con el orden de las filas del otro. *DebSeq2* no hace ninguna comprobación a la hora de cruzar los datos ni utiliza ningún campo como clave, se limita a cruzar por orden fila con columna, por lo que estas han de estar correctamente ordenadas.  
 En la tabla 2 se puede ver el resultado parcial para las cinco primeras columnas y filas de la ordenación efectuada.  
 
 ```{r}
@@ -165,7 +169,26 @@ identical(colnames(counts_sample), targets_sample$Sample_Name)
 
 ### Control de calidad de los datos en bruto
 
-Es necesario realizar un control de la calidad de los datos antes de proceder con el experimento. 
+Es necesario realizar un control de la calidad de los datos antes de proceder con el experimento. Para ello es conveniente transformar antes los datos ya que suelen mostrar un sesgo muy grande. La transformación $log_2"$ nos ayuda a normalizar las distribuciones para la visualización.
+
+**ATENCIÓN:** Es muy importante no utilizar datos normalizados para crear el objeto *DESeqDataSet*. Las funciones que trabajan con él esperan los datos en bruto y ya se encargan ellas de realizar las transformaciones necesarias. 
+
+En el apéndice de imágenes se pueden ver los datos normalizados por grupo de muestra. 
+
+```{r include = FALSE}
+pseudoCount = log2(counts_sample + 1)
+df = melt(pseudoCount, variable_name = "Samples")
+df = data.frame(df, group = targets_sample$Group[match(df$Samples, targets_sample$Sample_Name)])
+png("figures/boxplotnorm.png", width = 680, height = 680)
+ggplot(df, aes(x = Samples, y = value, fill = group)) + geom_boxplot() + xlab("") +
+       ylab(expression(log[2](count + 1))) +  ggtitle("Cuentas normalizadas por grupo de muestra")
+       theme(axis.title.x=element_blank(), axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+dev.off()
+```
+
+
+
 
 
 ### Creación del objeto DESeqDataSet 
@@ -187,28 +210,26 @@ dds <- DESeqDataSetFromMatrix(countData = counts_sample,
 
 ### Análisis exploratorio y visualización 
 
-First, for visualization purposes, we will transform the data to make it easier to explore the relationships on it. But for the statistical analysis we will go back to use the full data.
+Para realizar el análisis filtramos los datos para eliminar filas que solo tienen una observación. Se pueden elegir otros puntos de corte según el tipo de datos. En este caso como los conjuntos no son demasiado grandes nos basta con eliminar aquellos con solo una observación. Lo que nos deja de un número original de `r nrow(dds)` en solo `r nrow(dds[ rowSums(counts(dds)) > 1, ])`
 
-## Pre filtering the data set for empty rows.  
-We start by removing all rows which do have one or none count at all.  
-
-```{r}
+```{r include = FALSE}
 nrow(dds)
 dds <- dds[ rowSums(counts(dds)) > 1, ]
 nrow(dds)
 ```
 
-## Variance stabilizing transformation and rlog
+### Transformación para estabilizar la varianza
 
+El siguiente paso es transformar los datos para estabilizar la varianza 
 ```{r}
 
 vsd <- vst(dds, blind = FALSE)
 rld <- rlog(dds, blind = FALSE)
 
-dds <- estimateSizeFactors(dds)
+ddsn <- estimateSizeFactors(dds)
 
 df <- bind_rows(
-  as_tibble(log2(counts(dds, normalized=TRUE)[, 1:2]+1)) %>%
+  as_tibble(log2(counts(ddsn, normalized=TRUE)[, 1:2]+1)) %>%
          mutate(transformation = "log2(x + 1)"),
   as_tibble(assay(vsd)[, 1:2]) %>% mutate(transformation = "vst"),
   as_tibble(assay(rld)[, 1:2]) %>% mutate(transformation = "rlog"))
@@ -222,7 +243,48 @@ dev.off()
 
 We can see how genes with low counts (bottom left-hand corner) seem to be excessively variable on the ordinary logarithmic scale, while the VST and rlog compress differences for the low count genes for which the data provide little information about differential expression.  
 
+Como se trata de una comparación entre solo tres grupos, uno de control y otros dos. Un estudio de Principal Component Analysis nos permite identificar rápidamente si hay diferencias representativas en nuestros grupos. 
 
+```{r include = FALSE}
+png("figures/pca.png", width = 680, height = 680)
+plotPCA(vsd, intgroup = c("Group"))
+dev.off()
+```
+```{r}
+sampleDists <- dist(t(assay(vsd)))
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste( vsd$dex, vsd$cell, sep = " - " )
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "BuGn")) )(255)
+png("figures/distmatrix.png", width = 680, height = 680)
+print(pheatmap(sampleDistMatrix,
+         clustering_distance_rows = sampleDists,
+         clustering_distance_cols = sampleDists,
+         col = colors))
+dev.off()
+```
+
+### Análisis de expresión diferencial
+
+Para realizar el análisi hemos utilizado la función `DESeq` y después obtenido los resultados con `resault`. A la hora de crear los resultados hemos tomado un punto de corte del p-valor $alpha = 0.05$. Para seleccionar la comparación a extraer para cada resultado hemos utilizado el parámetro `contrast` para seleccionar el contraste que previamente habíamos podido comprobar con `resultsNames`.
+
+
+```{r}
+dds <- DESeq(dds, parallel =TRUE)
+resultsNames(dds)
+# Group_ELI_vs_NIT
+res_ELIvNIT <- results(dds, contrast =c("Group","ELI","NIT"), alpha = 0.05)
+# Group_SFI_vs_NIT
+res_SFIvNIT <- results(dds, contrast=c("Group","SFI","NIT"), alpha = 0.05)
+# Group_NIT_vs_SFI
+res_NITvSFI <- results(dds, contrast=c("Group","ELI","SFI"), alpha = 0.05)
+# Ahora cambiamos el orden de los factores para obtener la comparación que nos falta.
+
+res3 <- lfcShrink(dds, contrast=c("Group","ELI","SFI"), type="ashr")
+
+```
+Como vamos a enriquecer luego los datos y para compararlos mejor es conveniente proceder a la compresión de de los resultados de log2Fold. Esto en anteriores versiones se hacía por defecto y ahora se consigue con la función `lfcShrink`.
 
 # Resultados
 
@@ -246,53 +308,8 @@ We can see how genes with low counts (bottom left-hand corner) seem to be excess
 
 
 
-## Samples distances
 
-```{r}
-sampleDists <- dist(t(assay(vsd)))
 
-sampleDistMatrix <- as.matrix( sampleDists )
-rownames(sampleDistMatrix) <- paste( vsd$dex, vsd$cell, sep = " - " )
-colnames(sampleDistMatrix) <- NULL
-colors <- colorRampPalette( rev(brewer.pal(9, "BuGn")) )(255)
-png("figures/distmatrix.png", width = 680, height = 680)
-print(pheatmap(sampleDistMatrix,
-         clustering_distance_rows = sampleDists,
-         clustering_distance_cols = sampleDists,
-         col = colors))
-dev.off()
-```
-
-## PCA plot
-
-```{r}
-plotPCA(vsd, intgroup = c("Group"))
-```
-
-# Differential Expression Analysis
-
-```{r}
-dds <- DESeq(dds, parallel =TRUE)
-resultsNames(dds)
-# Group_ELI_vs_NIT
-res_ELIvNIT <- results(dds, contrast=c(0,1,0), alpha = 0.05)
-# Group_SFI_vs_NIT
-res_SFIvNIT <- results(dds, contrast=c(0,0,1), alpha = 0.05)
-
-# Ahora cambiamos el orden de los factores para obtener la comparación que nos falta.
-
-targets_sample$Group <- relevel(targets_sample$Group, "SFI")
-dds <- DESeqDataSetFromMatrix(countData = counts_sample,
-                              colData = targets_sample,
-                              design = ~ Group)
-dds <- DESeq(dds, parallel =TRUE)
-resultsNames(dds)
-# Group_NIT_vs_SFI
-res_NITvSFI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
-
-# Group_ELI_vs_SFI
-res_ELIvSFI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
-```
 ## Top genes
 
 ```{r}
@@ -327,19 +344,14 @@ columns(org.Hs.eg.db)
       #                multiVals="first")
 ```
 
-# Extra
+# Apéndice A - Figuras
 
-b) Quality control of the raw data. 
+\begin{center}Fig.1: Boxplot for raw data\end{center}
+ 
+![Boxplot Norm](figures/boxplotnorm.png)
 
-```{r}
-# Vemos que la distribución tiene un sesgo muy pronunciado. 
-# Mostramos una de las muestras como ejemplo, pero ocurre lo mismo en todas.
-qplot(counts_sample[,1], geom="histogram") 
-# Log base 2 is typically used as it facilitates the conversion back to the original scale: 
-# a difference of 1 on the log base 2 scale corresponds to a fold change of 2 on the original count scale. 
-pseudoCount = log2(counts_sample + 1)
-qplot(pseudoCount[,1], geom="histogram") 
-```
+
+
 
 # Información de la sesión de R
 
@@ -348,6 +360,18 @@ Incluimos la información sobre la sesión de R con la que se realizó el trabaj
 ```{r}
 sessionInfo()
 ```
+
+targets_sample$Group <- relevel(targets_sample$Group, "SFI")
+dds <- DESeqDataSetFromMatrix(countData = counts_sample,
+                              colData = targets_sample,
+                              design = ~ Group)
+dds <- DESeq(dds, parallel =TRUE)
+resultsNames(dds)
+# Group_NIT_vs_SFI
+res_NITvSFI <- results(dds, contrast=c(0,1,0), alpha = 0.05)
+
+# Group_ELI_vs_SFI
+res_ELIvSFI <- results(dds, contrast=c(0,0,1), alpha = 0.05)
 
 # Referencias
 
