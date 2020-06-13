@@ -6,6 +6,7 @@ output:
   pdf_document:
     toc: true
     number_sections: true
+    fig_caption: yes
   html_document:
     df_print: paged
 params:
@@ -43,6 +44,8 @@ if(!(require(ashr)))
   BiocManager::install("ashr")
 if(!(require(org.Hs.eg.db))) 
 BiocManager::install("org.Hs.eg.db")
+if(!(require(clusterProfiler))) 
+BiocManager::install("clusterProfiler")
 
 ```
 
@@ -267,24 +270,104 @@ dev.off()
 
 ### Análisis de expresión diferencial
 
-Para realizar el análisi hemos utilizado la función `DESeq` y después obtenido los resultados con `resault`. A la hora de crear los resultados hemos tomado un punto de corte del p-valor $alpha = 0.05$. Para seleccionar la comparación a extraer para cada resultado hemos utilizado el parámetro `contrast` para seleccionar el contraste que previamente habíamos podido comprobar con `resultsNames`.
+Para realizar el análisis hemos utilizado la función `DESeq` y después obtenido los resultados con `resault`. A la hora de crear los resultados hemos tomado un punto de corte del p-valor ajustado de $alpha = 0.05$. Para seleccionar la comparación a extraer para cada resultado hemos utilizado el parámetro `contrast` para seleccionar los contrastes buscados.  
+Obtenemos los resultados en bruto y también aplicando compresión a los resultados de log2Fold. Como vamos a enriquecer luego los datos y para compararlos mejor es conveniente proceder a la compresión de los resultados de log2Fold. Esto en anteriores versiones se hacía por defecto y ahora se consigue con la función `lfcShrink`. También ayuda para la visualización de los mismos.  
 
 
 ```{r}
 dds <- DESeq(dds, parallel =TRUE)
 resultsNames(dds)
 # Group_ELI_vs_NIT
-res_ELIvNIT <- results(dds, contrast =c("Group","ELI","NIT"), alpha = 0.05)
+res_ELIvNIT_unshrunken <- results(dds, contrast =c("Group","ELI","NIT"), alpha = 0.05)
+res_ELIvNIT <- lfcShrink(dds, contrast=c("Group","ELI","NIT"), type="ashr", alpha = 0.05)
 # Group_SFI_vs_NIT
-res_SFIvNIT <- results(dds, contrast=c("Group","SFI","NIT"), alpha = 0.05)
+res_SFIvNIT_unshrunken <- results(dds, contrast=c("Group","SFI","NIT"), alpha = 0.05)
+res_SFIvNIT <- lfcShrink(dds, contrast=c("Group","SFI","NIT"), type="ashr", alpha = 0.05)
 # Group_NIT_vs_SFI
-res_NITvSFI <- results(dds, contrast=c("Group","ELI","SFI"), alpha = 0.05)
+res_ELIvSFI_unshrunken <- results(dds, contrast=c("Group","ELI","SFI"), alpha = 0.05)
+res_ELIvSFI <- lfcShrink(dds, contrast=c("Group","ELI","SFI"), type="ashr", alpha = 0.05)
 # Ahora cambiamos el orden de los factores para obtener la comparación que nos falta.
 
-res3 <- lfcShrink(dds, contrast=c("Group","ELI","SFI"), type="ashr")
+```
+```{r maplot, echo=FALSE, fig.width=7,fig.height=6,fig.cap="\\label{fig:maplot}MA plots de los resultados"}
+par(mfrow=c(2,3))
+plotMA(res_SFIvNIT, ylim=c(-5,5))
+title("SFIvNIT")
+plotMA(res_ELIvNIT, ylim=c(-5,5))
+title("ELIvNIT")
+plotMA(res_ELIvSFI, ylim=c(-5,5))
+title("ELIvSFI")
+plotMA(res_SFIvNIT_unshrunken, ylim=c(-5,5))
+title("SFIvNIT sin compresión")
+plotMA(res_ELIvNIT_unshrunken, ylim=c(-5,5))
+title("ELIvNIT sin compresión")
+plotMA(res_ELIvSFI_unshrunken, ylim=c(-5,5))
+title("ELIvSFI sin compresión")
 
 ```
-Como vamos a enriquecer luego los datos y para compararlos mejor es conveniente proceder a la compresión de de los resultados de log2Fold. Esto en anteriores versiones se hacía por defecto y ahora se consigue con la función `lfcShrink`.
+
+En la Figura 3 podemos ver el `log2` de fold change para cada uno de los resultados. Los puntos azules son aquellos que tienen un valor representativo de p-adjust, y los triángulos en los bordes muestran dónde los puntos salen de rango.  
+Observamos que hay una sobre expresión representativa respecto a NIT tanto en SFI como en ELI.  
+
+### Anotación
+
+Enriquecemos los datos con la información sobre el gen al que pertenece cada `ensembl`. Para ello utilizamos la base de datos `org.Hs.eg.db`. Eso nos permite ver cuales son los genes más diferencialmente expresados en cada caso.  
+
+Después guardamos los archivos con los resultados enriquecidos y ordenados por p-adjust.
+
+
+```{r}
+columns(org.Hs.eg.db)
+
+res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_ELIvNIT)),
+                      column="SYMBOL",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+res_ELIvNIT$entrez <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_ELIvNIT)),
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+res_SFIvNIT$symbol <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_SFIvNIT)),
+                      column="SYMBOL",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+res_SFIvNIT$entrez <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_SFIvNIT)),
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+res_ELIvSFI$symbol <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_ELIvSFI)),
+                      column="SYMBOL",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+res_ELIvSFI$entrez <- mapIds(org.Hs.eg.db,
+                      keys=gsub("\\..*","",row.names(res_ELIvSFI)),
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+
+res_ELIvNIT <- res_ELIvNIT[order(res_ELIvNIT$pvalue),]
+res_SFIvNIT <- res_SFIvNIT[order(res_SFIvNIT$pvalue),]
+res_ELIvSFI <- res_ELIvSFI[order(res_ELIvSFI$pvalue),]
+
+write.csv(HMdata, file = file.path("./results/data4Heatmap.csv"))
+
+kable_styling(knitr::kable(head(res_ELIvNIT[,c(5,6,7)],10), booktabs = TRUE,
+                            caption = 'ELIvNIT'),font_size = 10, 
+              bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
+kable_styling(knitr::kable(head(res_SFIvNIT[,c(5,6,7)],10), booktabs = TRUE,
+                            caption = 'SFIvNIT'),font_size = 10, 
+              bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
+kable_styling(knitr::kable(head(res_ELIvSFI[,c(5,6,7)],10), booktabs = TRUE,
+                            caption = 'ELIvSFI'),font_size = 10, 
+              bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
+
+```
+
 
 # Resultados
 
@@ -332,17 +415,18 @@ head(topGenes_ELIvSFI)
 
 ```
 
-# Annotation
-
 ```{r}
-columns(org.Hs.eg.db)
 
- # res_ELIvNIT$symbol <- mapIds(org.Hs.eg.db,
-   #                   keys=row.names(res_ELIvNIT),
-    #                  column="SYMBOL",
-     #                 keytype="ENSEMBL",
-      #                multiVals="first")
+kk <- enrichKEGG(gene         = topGenes_SFIvNIT$entrez,
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.05)
+
+head(kk)
+
+# browseKEGG(kk, 'hsa05164')
+
 ```
+
 
 # Apéndice A - Figuras
 
