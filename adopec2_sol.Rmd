@@ -15,10 +15,14 @@ params:
 bibliography: RNA-Seq.bib
 ---
 
-```{r setup,}
+```{r include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 if(!(require(plyr))) 
   install.packages("plyr")
+if(!(require(knitr))) 
+  install.packages("knitr")
+if(!(require(kableExtra))) 
+  BiocManager::install("kableExtra")
 if(!(require(dplyr))) 
   install.packages("dplyr")
 if(!(require(ggplot2))) 
@@ -48,12 +52,14 @@ BiocManager::install("org.Hs.eg.db")
 
 # Objetivos
 
-Queremos hacer un análisis de expresión genética diferencial a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:
+Queremos hacer un análisis de expresión genética diferencial a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:  
+
 * *Not infiltrated tissues* (NIT)
 * *Small focal infiltrates* (SFI)
 * *Extensive lymphoid infiltrates* (ELI)
   
-Para ello realizaremos los contrastes:
+Para ello realizaremos los contrastes:  
+
 * SFI-NIT
 * ELI-NIT
 * ELI-SFI
@@ -67,21 +73,17 @@ Las muestras provienen de dos fuentes de datos. Por un lado las obtenidas por RN
 
 ## Métodos y herramientas
 
-Hemos utilizado el lenguaje R [@onoda_reactive_2014] y las herramientas de Bioconductor, en particular la librería DebSeq2 [@love_deseq2_2020].  
+Hemos utilizado el lenguaje R [@noauthor_r_nodate] y las herramientas de Bioconductor, en particular la librería DebSeq2 [@love_deseq2_2020].  
 
  
 ## Workflow
 
 ### 1 Lectura de datos
 
-
-
-### 2 Identificación de grupos y preparación de los datos
-
 El informe está realizado a partir de dos archivos ya preparados. El archivo `r params$counts_file` contiene los conteos de las muestras del experimento para cada ensamble. El archivo `r params$targets` contiene los datos relacionados con cada una de las muestras.  
 Los archivos utilizados en el estudio están correctamente formados y no faltan datos.
 
-```{r}
+```{r echo=FALSE}
 # Leemos los archivos de datos
 targets <- read.csv(params$targets_file)
 counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
@@ -91,37 +93,72 @@ sum(is.na(targets))
 sum(is.na(counts))
 
 # Observamos la distribución de la media y la desviación estándar de las variables.
-plot(apply(counts[-1],2,mean))
-plot(apply(counts[-1],2,sd))
+par(mfrow=c(1,2))
+plot(apply(counts[-1],2,mean), main = "Medias de las muestras", xlab="", ylab="")
+plot(apply(counts[-1],2,sd), main = "Desviación típica de las muestras", xlab="", ylab="")
 ```
 
 En un archivo se usa "." como separador en el nombre de las muestras, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.
 
-```{r}
+```{r include=FALSE}
 colnames(counts) <-gsub("[.]","-", colnames(counts))
 ```
 
+### 2 Identificación de grupos y preparación de los datos
+
 El número de observaciones que hay de cada grupo es:
-```{r}
+```{r echo = FALSE}
 table(targets$Group)
+kable_styling(knitr::kable(table(targets$Group), booktabs = TRUE,
+                            caption = 'Muestras por grupo'),font_size = 10)
 ```
 La variable que codifica el grupo ha de ser un factor, y es muy importante tener en cuenta que el primer elemento del factor será tomado como elemento de control, y será con el que se harán las comparaciones en el caso de fórmula de una sola variable.  
 Para realizar los contrastes:  
+
 * SFI-NIT  
 * ELI-NIT  
+
 Debemos de tener a NIT como primer factor. Mientras que para el último contraste:  
+
 * ELI-SFI  
+
 EL primer factor debe de ser SFI.  
+
 Esta es una parte bastante delicada. Es importante para la correcta realización de las pruebas que los factores estén correctamente preparados. Esto puede comprobarse después comprobando los nombres de los contrastes preparados en el objeto *DESeqDataSet* con la instrucción `resultsNames`
 
-```{r}
+```{r include = FALSE}
 targets$Group <- as.factor(targets$Group)
 targets$Group <- relevel(targets$Group, "NIT")
 ```
 
 
-Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada uno de los grupos.
+Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada uno de los grupos. Para hacerlo sin tener que dividir el data frame nos valemos de la función `ddply`, que permite aplicar una función a distintos conjuntos de un data frame, y crea un data frame de salida con las respuestas. Así la usamos para generar un data frame con el número de muestras deseadas para cada grupo.  
+Es importante haber comprobado antes que el número de muestras de cada grupo excede al de muestras a coger para el experimento, ya que si no los resultados no serán correctos.
 
+```{r include = FALSE}
+  
+# Tomamos las muestras de targets.
+set.seed(123999)
+# Utilizamos la función ddply para obtener el mismo número de muestras de cada grupo del data frame,
+# y devolver el resultado en un nuevo dataframe.
+targets_sample <- ddply(targets,.(Group),function(x) x[sample(nrow(x),params$samples),])
+table(targets_sample$Group)
+
+# Y ahora las muestras correspondientes en counts
+counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)]
+
+# Y finalmente las ordenamos de la misma forma según las indicaciones para usar DESeq2. 
+targets_sample <- targets_sample[order(targets_sample$Sample_Name),]
+counts_sample <- counts_sample[ , order(colnames(counts_sample))]
+```
+
+```{r}
+kable_styling(knitr::kable(data.frame("Columnas en counts" = head(colnames(counts_sample)),
+                                      "Filas en targets" = head(targets_sample$Sample_Name)),
+                           booktabs = TRUE,
+                           caption = 'Ejemplo de las muestras correctamente ordenadas'),font_size = 10)
+identical(colnames(counts_sample), targets_sample$Sample_Name)
+```
 
 
 # Resultados
@@ -140,25 +177,7 @@ Para nuestro estudio vamos a tomar `r params$samples` muestras al azar de cada u
 
 
 
-```{r}
-  
-# Tomamos las muestras de targets.
-set.seed(123999)
-# Utilizamos la función ddply para obtener el mismo número de muestras de cada grupo del data frame,
-# y devolver el resultado en un nuevo dataframe.
-targets_sample <- ddply(targets,.(Group),function(x) x[sample(nrow(x),params$samples),])
-table(targets_sample$Group)
 
-# Y ahora las muestras correspondientes en counts
-counts_sample <- counts[,which(colnames(counts) %in% targets_sample$Sample_Name)]
-
-# Y finalmente las ordenamos de la misma forma según las indicaciones para usar DESeq2. 
-targets_sample <- targets_sample[order(targets_sample$Sample_Name),]
-counts_sample <- counts_sample[ , order(colnames(counts_sample))]
-
-identical(colnames(counts_sample), targets_sample$Sample_Name)
-```
-We choose to ignore the `molecular_data_type` information. If we would like to use only RNA Seq data we should filter that field first.
 
 
 # b) Quality control of the raw data. 
