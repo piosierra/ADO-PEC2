@@ -49,17 +49,19 @@ if(!(require(clusterProfiler)))
 
 ```
 
-***
-**Repositorio de github:** https://github.com/piosierra/ADO-PEC2
 
-***
+***Repositorio de github:** https://github.com/piosierra/ADO-PEC2*
 
-# Abstract
 
+
+# Abstract  
+
+Como parte de la evaluación para la asignatura *Análisis de datos ómicos* de la UOC se presenta un análisis de expresión genética diferencial de tres muestras de tiroides llevado a cabo con la librería DESeq2. 
 
 # Objetivos
+Siguiendo el roadmap presentado en *A survey of best practices for RNA-seq data analysis* [@conesa_survey_2016] hemos procedido a realizar un análisis de expresión genética diferencial. Como ya recibimos los datos de conteo preprocesados, y no vamos a realizar el análisis posterior de los resultados, nos centraremos en la parte central del roadmap como aparece indicado en la Figura 3 en el apéndice.  
 
-Queremos hacer un análisis de expresión genética diferencial a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:  
+En particular realizamos el análisis a partir de tres muestras aleatorias de tiroides de `r params$samples` elementos, cada una de tres grupos diferentes:  
 
 * *Not infiltrated tissues* (NIT)
 * *Small focal infiltrates* (SFI)
@@ -99,14 +101,16 @@ counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
 sum(is.na(targets))
 sum(is.na(counts))
 ```
-```{r iniplot, echo=FALSE, fig.width=7,fig.height=6,fig.cap="\\label{fig:iniplot}Análisis exploratorio de las muestras."}
+```{r iniplot, echo=FALSE, fig.width=7,fig.height=3,fig.cap="\\label{fig:iniplot}Análisis exploratorio de las muestras."}
 # Observamos la distribución de la media y la desviación estándar de las variables.
 par(mfrow=c(1,2))
 plot(apply(counts[-1],2,mean), main = "Medias de las muestras", xlab="", ylab="")
 plot(apply(counts[-1],2,sd), main = "Desviación típica de las muestras", xlab="", ylab="")
 ```
 
-En un archivo se usa "." como separador en el nombre de las muestras, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.
+En un archivo se usa "." como separador en el nombre de las muestras, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.  
+Otro aspecto relevante es que las etiquetas de `ensembl` contienen información sobre la versión del mismo. Aunque para cruzarlas luego con las bases de datos de genes es necesario prescindir de esta información, hemos preferido mantenerla en los archivos a eliminarla de los resultados, perdiendo así la información de la misma.  
+
 
 ```{r include=FALSE}
 colnames(counts) <-gsub("[.]","-", colnames(counts))
@@ -114,7 +118,7 @@ colnames(counts) <-gsub("[.]","-", colnames(counts))
 
 ### Identificación de grupos y preparación de los datos
 
-El número de observaciones que hay de cada grupo puede verse en la tabla 1.
+El número de observaciones que hay de cada grupo puede verse en la Tabla 1.
 ```{r echo = FALSE}
 kable_styling(knitr::kable(table(targets$Group), booktabs = TRUE,
                             caption = 'Muestras por grupo'),font_size = 10)
@@ -129,7 +133,7 @@ Debemos de tener a NIT como primer factor. Mientras que para el último contrast
 
 * ELI-SFI  
 
-EL primer factor debe de ser SFI.  
+EL primer factor debe de ser SFI. Sin embargo hemos optado como se detalla más adelante por utilizar el parámetro `contrast` para seleccionar manualmente los contrastes a la hora de obtener los resultados.   
 
 Esta es una parte bastante delicada. Es importante para la correcta realización de las pruebas que los factores estén correctamente preparados. Esto puede comprobarse después comprobando los nombres de los contrastes preparados en el objeto *DESeqDataSet* con la instrucción `resultsNames`. En realidad para este estudio no es tan relevante, ya que queremos comparar los tres grupos y por tanto procederemos a seleccionar los contrastes manualmente. 
 
@@ -200,9 +204,9 @@ DebSeq2 trabaja con un objeto *DESeqDataSet* que está construido sobre la clase
 
 Una fórmula puede ser de la forma `~ variable` donde `variable` es una columna de factores que especifica dos o más grupos a los que pertenecen las muestras. Se pueden añadir otras columnas separándolas por `+` según el diseño de fórmulas habitual de R.  
 
-Por defecto DebSeq2 va a preparar los contrastes de cada grupo con el primero de los factores, que será tenido como elemento de control. Por eso es importante que "coloquemos" los factores de tal forma que el primero sea ese. Esto se puede conseguir con la función `relevel`.  
+Por defecto DebSeq2 va a preparar los contrastes de cada grupo con el primero de los factores, que será tenido como elemento de control. Por eso es importante que "coloquemos" los factores de tal forma que el primero sea ese. Esto se puede conseguir con la función `relevel`, pero es más sencillo seleccionar directamente los contrastes buscados con el parámetro `contrast`.
 
-En nuestro caso queremos hacer dos contrastes con el grupo de control NIT, pero también uno adicional entre ELI y SFI. Por tanto después de obtener los resultados para los primeros dos contrastes cambiamos el orden de los factores y obtenemos además el contraste buscado. Si lo hemos hecho correctamente, el contraste realizado dos veces pero en dirección distinta (SFI-NIT, NIT-SFI) tendrá los mismos coeficientes pero con los signos cambiados.  
+En nuestro caso queremos hacer dos contrastes con el grupo de control NIT, pero también uno adicional entre ELI y SFI. Es importante tener en cuenta que al seleccionar dos grupos para el contraste el último siempre funciona como control. Por lo que el resultado será positivo si hay una sobre expresión del primero y negativo si la expresión en más alta en el segundo. Un contraste realizado dos veces pero en dirección distinta (SFI-NIT, NIT-SFI) tendrá el mismo resultado pero con los signos cambiados.  
 
 ```{r}
 dds <- DESeqDataSetFromMatrix(countData = counts_sample,
@@ -223,7 +227,8 @@ nrow(dds)
 
 ### Transformación para estabilizar la varianza
 
-El siguiente paso es transformar los datos para estabilizar la varianza y poder así estudiarlos visualmente más fácilmente.
+Podemos ver visualmente la importancia de realizar la estabilización de la varianza transformando los datos para realizar una comparación. El resultado puede verse en el apéndice, pero de nuevo es importante recordar que DESeq realiza esto internamente y espera recibir los datos sin ningún tipo de normalización.
+
 ```{r include = FALSE}
 
 vsd <- vst(dds, blind = FALSE)
@@ -246,7 +251,7 @@ dev.off()
 
 En el apéndice se puede ver la comparación de la dispersión de la varianza entre los datos en bruto y los datos normalizados con `vst` y `rlog`. El objetivo es comprobar que hay datos que tienen mucha varianza a pesar de tener un conteo pequeño, y que esas tranformaciones reducen la varianza en ese rango de datos.   
 
-Como se trata de una comparación entre solo tres grupos, uno de control y otros dos. Un estudio de Principal Component Analysis nos permite identificar rápidamente si hay diferencias representativas en nuestros grupos. 
+Otro de los sistemas más interesantes de comprobar a priori si existe diferencia marcada en la expresión de cada grupo consiste en hacer un estudio de PCA. Como se trata de una comparación entre solo tres grupos, uno de control y otros dos. Un estudio de Principal Component Analysis nos permite identificar rápidamente si hay diferencias representativas en nuestros grupos. Los resultados pueden verse en el apéndice.  
 
 ```{r include = FALSE}
 png("figures/pca.png", width = 680, height = 680)
@@ -270,7 +275,7 @@ dev.off()
 
 ### Análisis de expresión diferencial
 
-Para realizar el análisis hemos utilizado la función `DESeq` y después obtenido los resultados con `resault`. A la hora de crear los resultados hemos tomado un punto de corte del p-valor ajustado de $alpha = 0.05$. Para seleccionar la comparación a extraer para cada resultado hemos utilizado el parámetro `contrast` para seleccionar los contrastes buscados.  
+Para realizar el análisis hemos utilizado la función `DESeq` y después obtenido los resultados con `results`. A la hora de crear los resultados hemos tomado un punto de corte del p-valor ajustado de $alpha = 0.05$. Para seleccionar la comparación a extraer para cada resultado hemos utilizado el parámetro `contrast` para seleccionar los contrastes buscados.  
 Obtenemos los resultados en bruto y también aplicando compresión a los resultados de log2Fold. Como vamos a enriquecer luego los datos y para compararlos mejor es conveniente proceder a la compresión de los resultados de log2Fold. Esto en anteriores versiones se hacía por defecto y ahora se consigue con la función `lfcShrink`. También ayuda para la visualización de los mismos.  
 
 
@@ -311,9 +316,9 @@ Observamos que hay una sobre expresión representativa respecto a NIT tanto en S
 
 ### Anotación
 
-Enriquecemos los datos con la información sobre el gen al que pertenece cada `ensembl`. Para ello utilizamos la base de datos `org.Hs.eg.db`. Eso nos permite ver cuales son los genes más diferencialmente expresados en cada caso.  
+Hemos enriquecido los datos con la información sobre el gen al que pertenece cada `ensembl`. Para ello utilizamos la base de datos `org.Hs.eg.db`. Eso nos permite ver cuales son los genes más diferencialmente expresados en cada caso.  
 
-Después guardamos los archivos con los resultados enriquecidos y ordenados por p-adjust.
+Después guardamos los archivos con los resultados enriquecidos y ordenados por p-adjust. Como no son muchos ni demasiado grandes hemos escogido guardar los archivos completos. Como alternativa se podría haber hecho fácilmente una selección de solo los `n` elementos más diferencialmente expresados.  
 
 
 ```{r include = FALSE}
@@ -362,7 +367,7 @@ write.csv(res_SFIvNIT, file = file.path("./results/res_SFIvNIT.csv"))
 write.csv(res_ELIvSFI, file = file.path("./results/res_ELIvSFI.csv"))
 
 ```
-Podemos ver el resultado de los genes más sobre expresados en cada una de las comparaciones. Conviene recordar que tal y como comprobamos visualmente en todos los casos en estos tres contrastes estamos hablando de que los genes más diferencialmente expresados lo hacen por sobre expresión, y no por un descenso de la misma.
+Podemos ver el resultado de los genes más sobre expresados en cada una de las comparaciones. Conviene recordar que tal y como comprobamos visualmente en todos los casos en estos tres contrastes estamos hablando de que los genes más diferencialmente expresados lo hacen por sobre expresión, y no por un descenso de la misma. Si no contásemos ya con esa información sería necesario realizar el examen en los dos sentidos.  
 
 ```{r echo = FALSE}
 kable_styling(knitr::kable(head(res_ELIvNIT[,c(5,6,7)],5), booktabs = TRUE,
@@ -376,7 +381,7 @@ kable_styling(knitr::kable(head(res_ELIvSFI[,c(5,6,7)],5), booktabs = TRUE,
               bootstrap_options = c("striped", "condensed", digits = 20,  full_width = F))
 
 ```
-Por último utilizamos la función `enrichKEGG` del paquete *clusterProfiler* para obtener pathways representativos de los genes más sobre expresados. En los apéndices se puede ver los dos pathways más representativos para el contraste ELIvNIT.  
+Por último hemos utilizado la función `enrichKEGG` del paquete *clusterProfiler* para obtener pathways representativos de los genes más sobre expresados. En los apéndices se pueden ver los dos pathways más representativos para el contraste ELIvNIT.  
 
 ```{r include = FALSE}
 
@@ -392,87 +397,46 @@ head(kk$Description)
 
 # Resultados
 
+Los resultados se pueden encontrar en los archivos:  
+
+* **res_ELIvNIT.csv**: Tabla con los resultados del contraste entre los grupos ELI y NIT.  
+
+* **res_SFIvNIT.csv**: Tabla con los resultados del contraste entre los grupos SFI y NIT.  
+
+* **res_ELIvSFI.csv**: Tabla con los resultados del contraste entre los grupos ELI y SFI.  
+
+
 # Discusión
+
+Sería interesante haber sabido más sobre la diferencia de los dos tipos de datos y si era relevante para el estudio tratar de forma separada aquellos provenientes de Allele-Specific Expression de los de RNA-Seq.  
+Otro punto a tener en cuenta, pero este parece genérico a este tipo de estudios, es el bajo número de muestras disponibles, lo que pone interrogantes sobre algunos de los análisis estadísticos realizados.  
+
+Aunque hay otras que están disponibles en el repositorio, se reducido el número de figuras en el estudio a aquellas que realmente hemos estimado que aportaban información relevante al mismo.  
+
 
 # Conclusión
 
-# Apéndice 1
+N/A 
 
 
+# Apéndice 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Top genes
-
-```{r include = FALSE}
-
-topGenes_SFIvNIT <- as.data.frame(res_SFIvNIT) %>%
-    rownames_to_column("GeneID") %>% 
-    arrange(padj) %>% 
-    head(100)
-head(topGenes_SFIvNIT)
-topGenes_ELIvNIT <- as.data.frame(res_ELIvNIT) %>%
-    rownames_to_column("GeneID") %>% 
-    arrange(padj) %>% 
-    head(100)
-head(topGenes_ELIvNIT)
-topGenes_ELIvSFI <- as.data.frame(res_ELIvSFI) %>%
-    rownames_to_column("GeneID") %>% 
-    arrange(padj) %>% 
-    head(100)
-head(topGenes_ELIvSFI)
-
-```
-
-
-
-
-# Apéndice A - Figuras
-
-\begin{center}Fig.1: Boxplot de los datos normalizados\end{center}
+![Roadmap: A survey of best practices for RNA-seq data analysis](figures/roadmap.png)
  
-![Boxplot Norm](figures/boxplotnorm.png)
-\begin{center}Fig.2: Gráficos de dispersión de transformaciones de la varianza\end{center}
+![Boxplot de los datos normalizados](figures/boxplotnorm.png)
+
+
+![Gráficos de dispersión de transformaciones de la varianza](figures/vst.png)
  
-![Boxplot Norm](figures/vst.png)
+![Principal Component Analysis de los datos normalizados](figures/pca.png)
 
-\begin{center}Fig.2: Principal Component Analysis de los datos normalizados\end{center}
+
  
-![Boxplot Norm](figures/pca.png)
+![Pathway Primary Immunodeficiency](figures/primary_im.png)
+
+![Pathway Hematopoietic cell lineage](figures/Hematopoietic.png)
 
 
-
-\begin{center}Fig.2: Pathway Primary Immunodeficiency \end{center}
- 
-![Boxplot Norm](figures/primary_im.png)
-\begin{center}Fig.3: Pathway Hematopoietic cell lineage \end{center}
- 
-![Boxplot Norm](figures/Hematopoietic.png)
-
-
-
-
-
-
-# Información de la sesión de R
-
-Incluimos la información sobre la sesión de R con la que se realizó el trabajo, para poder identificar después problemas ocasionados por cambios de versiones.  
-
-```{r}
-sessionInfo()
-```
 
 
 # Referencias
