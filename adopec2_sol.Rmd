@@ -101,11 +101,13 @@ counts <- read.csv2(params$counts_file, header = TRUE, row.names = 1)
 sum(is.na(targets))
 sum(is.na(counts))
 ```
-```{r iniplot, echo=FALSE, fig.width=7,fig.height=3,fig.cap="\\label{fig:iniplot}Análisis exploratorio de las muestras."}
+```{r include=FALSE}
 # Observamos la distribución de la media y la desviación estándar de las variables.
+png("figures/muestras.png", width = 680, height = 680)
 par(mfrow=c(1,2))
 plot(apply(counts[-1],2,mean), main = "Medias de las muestras", xlab="", ylab="")
 plot(apply(counts[-1],2,sd), main = "Desviación típica de las muestras", xlab="", ylab="")
+dev.off()
 ```
 
 En un archivo se usa "." como separador en el nombre de las muestras, y en el otro "-". Los igualamos para poder comparar y asegurarnos de que cruzamos los datos correctamente.  
@@ -311,7 +313,7 @@ title("ELIvSFI sin compresión")
 
 ```
 
-En la Figura 2 podemos ver el `log2` de fold change para cada uno de los resultados. Los puntos azules son aquellos que tienen un valor representativo de p-adjust, y los triángulos en los bordes muestran dónde los puntos salen de rango.  
+En la Figura 1 podemos ver el `log2` de fold change para cada uno de los resultados. Los puntos azules son aquellos que tienen un valor representativo de p-adjust, y los triángulos en los bordes muestran dónde los puntos salen de rango.  
 Observamos que hay una sobre expresión representativa respecto a NIT tanto en SFI como en ELI.  
 
 ### Anotación
@@ -423,6 +425,8 @@ N/A
 
 ![Roadmap: A survey of best practices for RNA-seq data analysis](figures/roadmap.png)
  
+![Análisis exploratorio de las muestras](figures/boxplotnorm.png)
+
 ![Boxplot de los datos normalizados](figures/boxplotnorm.png)
 
 
